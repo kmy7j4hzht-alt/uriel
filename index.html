@@ -84,6 +84,92 @@
       cursor: pointer;
     }
     .card button:hover { background: var(--accent); color: #fff; }
+    .section-title { font-size: 1.4rem; margin: 0 0 16px; }
+    .frases { margin-bottom: 48px; }
+    .frase-card {
+      position: relative;
+      overflow: hidden;
+      border-radius: 24px;
+      padding: clamp(32px, 7vw, 72px) clamp(20px, 6vw, 64px);
+      min-height: 340px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      color: #fff;
+      background: linear-gradient(135deg, #c96442, #9b3d8f, #3f4fb8, #1e8a8a);
+      background-size: 300% 300%;
+      animation: degradado 14s ease infinite;
+      box-shadow: 0 16px 40px rgba(0,0,0,.18);
+    }
+    .frase-card::before, .frase-card::after {
+      content: "";
+      position: absolute;
+      border-radius: 50%;
+      filter: blur(40px);
+      opacity: .45;
+      pointer-events: none;
+    }
+    .frase-card::before { width: 260px; height: 260px; background: #ffb38a; top: -80px; right: -60px; }
+    .frase-card::after { width: 220px; height: 220px; background: #7fd4ff; bottom: -90px; left: -50px; }
+    @keyframes degradado {
+      0% { background-position: 0% 50%; }
+      50% { background-position: 100% 50%; }
+      100% { background-position: 0% 50%; }
+    }
+    .frase-card blockquote {
+      position: relative;
+      margin: 0;
+      font-size: clamp(1.8rem, 5.5vw, 3.4rem);
+      font-weight: 800;
+      line-height: 1.15;
+      letter-spacing: -.02em;
+      transition: opacity .4s ease;
+    }
+    .frase-card blockquote::before {
+      content: "“";
+      display: block;
+      font-size: 4em;
+      line-height: .6;
+      opacity: .35;
+    }
+    .frase-card cite {
+      position: relative;
+      display: block;
+      margin-top: 20px;
+      font-style: normal;
+      font-size: clamp(1rem, 2.5vw, 1.25rem);
+      opacity: .9;
+      transition: opacity .4s ease;
+    }
+    .frase-card.cambiando blockquote, .frase-card.cambiando cite { opacity: 0; }
+    .frase-controles {
+      position: relative;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-top: 32px;
+    }
+    .frase-controles button {
+      width: 40px; height: 40px;
+      border-radius: 50%;
+      border: 1px solid rgba(255,255,255,.6);
+      background: rgba(255,255,255,.15);
+      color: #fff;
+      font-size: 1.1rem;
+      cursor: pointer;
+    }
+    .frase-controles button:hover { background: rgba(255,255,255,.3); }
+    .puntos { display: flex; gap: 8px; }
+    .puntos span {
+      width: 10px; height: 10px;
+      border-radius: 50%;
+      background: rgba(255,255,255,.4);
+      cursor: pointer;
+    }
+    .puntos span.activo { background: #fff; }
+    @media (prefers-reduced-motion: reduce) {
+      .frase-card { animation: none; }
+    }
     footer { text-align: center; color: var(--muted); margin-top: 48px; font-size: .9rem; }
     code { background: var(--code-bg); padding: 1px 6px; border-radius: 4px; }
   </style>
@@ -96,6 +182,20 @@
         que puedes darle a Claude Code para generar distintos elementos. Copia el ejemplo y pégalo en Claude Code.</p>
     </header>
 
+    <section class="frases">
+      <h2 class="section-title">Frases memorables</h2>
+      <div class="frase-card" id="frase-card">
+        <blockquote id="frase-texto"></blockquote>
+        <cite id="frase-autor"></cite>
+        <div class="frase-controles">
+          <button type="button" id="frase-anterior" aria-label="Frase anterior">‹</button>
+          <div class="puntos" id="frase-puntos"></div>
+          <button type="button" id="frase-siguiente" aria-label="Frase siguiente">›</button>
+        </div>
+      </div>
+    </section>
+
+    <h2 class="section-title">Ejemplos para Claude Code</h2>
     <section class="grid" id="cards"></section>
 
     <footer>
@@ -150,6 +250,54 @@
       });
       grid.appendChild(card);
     }
+
+    const frases = [
+      { texto: "La mejor forma de predecir el futuro es inventarlo.", autor: "Alan Kay" },
+      { texto: "Primero resuelve el problema. Luego, escribe el código.", autor: "John Johnson" },
+      { texto: "Hablar es barato. Muéstrame el código.", autor: "Linus Torvalds" },
+      { texto: "La imaginación es más importante que el conocimiento.", autor: "Albert Einstein" },
+      { texto: "Cualquiera puede escribir código que una computadora entienda. Los buenos programadores escriben código que los humanos entienden.", autor: "Martin Fowler" },
+      { texto: "Sigue hambriento, sigue alocado.", autor: "Steve Jobs" }
+    ];
+
+    const fraseCard = document.getElementById("frase-card");
+    const fraseTexto = document.getElementById("frase-texto");
+    const fraseAutor = document.getElementById("frase-autor");
+    const puntos = document.getElementById("frase-puntos");
+    let actual = 0;
+    let temporizador;
+
+    frases.forEach((_, i) => {
+      const punto = document.createElement("span");
+      punto.addEventListener("click", () => mostrarFrase(i));
+      puntos.appendChild(punto);
+    });
+
+    function mostrarFrase(i, inmediato = false) {
+      actual = (i + frases.length) % frases.length;
+      const pintar = () => {
+        fraseTexto.textContent = frases[actual].texto;
+        fraseAutor.textContent = "— " + frases[actual].autor;
+        [...puntos.children].forEach((p, j) => p.classList.toggle("activo", j === actual));
+        fraseCard.classList.remove("cambiando");
+      };
+      if (inmediato) return pintar();
+      fraseCard.classList.add("cambiando");
+      setTimeout(pintar, 400);
+      reiniciarTemporizador();
+    }
+
+    function reiniciarTemporizador() {
+      clearInterval(temporizador);
+      if (!matchMedia("(prefers-reduced-motion: reduce)").matches) {
+        temporizador = setInterval(() => mostrarFrase(actual + 1), 7000);
+      }
+    }
+
+    document.getElementById("frase-anterior").addEventListener("click", () => mostrarFrase(actual - 1));
+    document.getElementById("frase-siguiente").addEventListener("click", () => mostrarFrase(actual + 1));
+    mostrarFrase(0, true);
+    reiniciarTemporizador();
   </script>
 </body>
 </html>
