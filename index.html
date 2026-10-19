@@ -170,23 +170,17 @@
     @media (prefers-reduced-motion: reduce) {
       .frase-card { animation: none; }
     }
-    .boton-particulas {
-      display: inline-flex;
-      align-items: center;
-      gap: 8px;
-      margin-top: 24px;
-      padding: 14px 28px;
+    .enlace-demo {
+      display: inline-block;
+      margin-top: 20px;
+      padding: 8px 18px;
       border-radius: 999px;
-      background: linear-gradient(135deg, #c96442, #9b3d8f, #3f4fb8);
-      color: #fff;
+      border: 1px solid var(--accent);
+      color: var(--accent);
       text-decoration: none;
-      font-size: 1.05rem;
-      font-weight: 600;
-      box-shadow: 0 8px 24px rgba(155, 61, 143, .35);
-      transition: transform .15s ease, box-shadow .15s ease;
+      font-size: .95rem;
     }
-    .boton-particulas:hover { transform: translateY(-2px); box-shadow: 0 12px 32px rgba(155, 61, 143, .5); }
-    .boton-particulas:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
+    .enlace-demo:hover { background: var(--accent); color: #fff; }
     footer { text-align: center; color: var(--muted); margin-top: 48px; font-size: .9rem; }
     code { background: var(--code-bg); padding: 1px 6px; border-radius: 4px; }
   </style>
@@ -197,7 +191,7 @@
       <h1>¡Bienvenido, <span>Uriel</span>! 👋</h1>
       <p>Esta es una página de prueba. Cada tarjeta muestra un ejemplo de instrucción (prompt)
         que puedes darle a Claude Code para generar distintos elementos. Copia el ejemplo y pégalo en Claude Code.</p>
-      <a class="boton-particulas" href="particulas.html">✨ Ver fondo de partículas →</a>
+      <a class="enlace-demo" href="particulas.html">✨ Ver fondo interactivo de partículas</a>
     </header>
 
     <section class="frases">
