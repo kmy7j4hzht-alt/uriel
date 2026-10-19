@@ -1,0 +1,826 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Campo de partículas</title>
+  <style>
+    :root {
+      --bg: #04050a;
+      --glass: rgba(14, 16, 28, .55);
+      --glass-border: rgba(255, 255, 255, .10);
+      --text: #eef0f7;
+      --muted: rgba(238, 240, 247, .62);
+      --accent: #e0835f;
+    }
+    * { box-sizing: border-box; }
+    html, body { height: 100%; }
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: var(--bg);
+      color: var(--text);
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      line-height: 1.5;
+    }
+    canvas {
+      position: fixed;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      display: block;
+      touch-action: none;
+      cursor: crosshair;
+    }
+    .capa { transition: opacity .35s ease; }
+    body.sin-ui .capa { opacity: 0; pointer-events: none !important; }
+
+    .volver {
+      position: fixed;
+      top: 16px; left: 16px;
+      color: var(--text);
+      text-decoration: none;
+      font-size: .9rem;
+      padding: 8px 14px;
+      border-radius: 999px;
+      background: var(--glass);
+      border: 1px solid var(--glass-border);
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+    }
+    .volver:hover { border-color: rgba(255,255,255,.3); }
+
+    .hero {
+      position: fixed;
+      inset: 0;
+      display: grid;
+      place-content: center;
+      text-align: center;
+      padding: 0 16px;
+      pointer-events: none;
+      user-select: none;
+    }
+    .hero h1 {
+      margin: 0;
+      font-size: clamp(2.6rem, 10vw, 6.5rem);
+      font-weight: 800;
+      letter-spacing: -.04em;
+      line-height: 1;
+      text-shadow: 0 0 40px rgba(0,0,0,.6);
+    }
+    .hero p {
+      margin: 16px auto 0;
+      max-width: 520px;
+      color: var(--muted);
+      font-size: clamp(.95rem, 2.4vw, 1.1rem);
+      text-shadow: 0 0 20px rgba(0,0,0,.8);
+    }
+    .pistas {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 8px;
+      margin-top: 20px;
+    }
+    .pistas span {
+      font-size: .8rem;
+      padding: 4px 12px;
+      border-radius: 999px;
+      background: rgba(255,255,255,.06);
+      border: 1px solid var(--glass-border);
+      color: var(--muted);
+    }
+
+    .ajustes-btn {
+      position: fixed;
+      top: 16px; right: 16px;
+      width: 40px; height: 40px;
+      border-radius: 50%;
+      border: 1px solid var(--glass-border);
+      background: var(--glass);
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+      color: var(--text);
+      font-size: 1.1rem;
+      cursor: pointer;
+    }
+    .panel {
+      position: fixed;
+      top: 68px; right: 16px;
+      width: 300px;
+      max-width: calc(100vw - 32px);
+      max-height: calc(100vh - 84px);
+      overflow-y: auto;
+      padding: 16px;
+      border-radius: 16px;
+      background: var(--glass);
+      border: 1px solid var(--glass-border);
+      backdrop-filter: blur(18px) saturate(140%);
+      -webkit-backdrop-filter: blur(18px) saturate(140%);
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      font-size: .85rem;
+      transform-origin: top right;
+      transition: opacity .2s ease, transform .2s ease;
+    }
+    .panel[hidden] { display: flex; opacity: 0; transform: scale(.96); pointer-events: none; }
+    .grupo { display: flex; flex-direction: column; gap: 6px; }
+    .grupo > .etiqueta { display: flex; justify-content: space-between; color: var(--muted); }
+    .grupo output { color: var(--text); font-variant-numeric: tabular-nums; }
+    .segmentado { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; }
+    .segmentado button, .acciones button {
+      border: 1px solid var(--glass-border);
+      background: rgba(255,255,255,.04);
+      color: var(--text);
+      border-radius: 8px;
+      padding: 6px 8px;
+      font: inherit;
+      cursor: pointer;
+    }
+    .segmentado button[aria-pressed="true"] { background: rgba(255,255,255,.16); border-color: rgba(255,255,255,.35); }
+    .paletas { display: flex; gap: 8px; flex-wrap: wrap; }
+    .paletas button {
+      width: 32px; height: 32px;
+      border-radius: 50%;
+      border: 2px solid transparent;
+      cursor: pointer;
+      padding: 0;
+    }
+    .paletas button[aria-pressed="true"] { border-color: #fff; }
+    input[type="range"] { width: 100%; accent-color: var(--accent); }
+    .acciones { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+    .estadisticas { color: var(--muted); font-size: .75rem; font-variant-numeric: tabular-nums; }
+
+    .aviso {
+      position: fixed;
+      inset: 0;
+      display: grid;
+      place-content: center;
+      text-align: center;
+      padding: 16px;
+      color: var(--muted);
+    }
+
+    @media (max-width: 520px) {
+      .panel { top: auto; bottom: 16px; right: 16px; left: 16px; width: auto; max-height: 60vh; transform-origin: bottom center; }
+    }
+  </style>
+</head>
+<body>
+  <canvas id="lienzo" aria-label="Fondo interactivo de partículas"></canvas>
+
+  <a class="volver capa" href="index.html">← Inicio</a>
+
+  <div class="hero capa" id="hero">
+    <h1>Partículas</h1>
+    <p>Cientos de miles de partículas simuladas en la GPU, siguiendo un campo de flujo de ruido <em>curl</em>.</p>
+    <div class="pistas">
+      <span>Mueve el cursor para arrastrar</span>
+      <span>Mantén presionado para deformar</span>
+      <span>Clic para una onda expansiva</span>
+      <span>H oculta la interfaz</span>
+    </div>
+  </div>
+
+  <button type="button" class="ajustes-btn capa" id="ajustes-btn" aria-label="Ajustes" aria-expanded="false" aria-controls="panel">⚙</button>
+  <div class="panel capa" id="panel" hidden>
+    <div class="grupo">
+      <div class="etiqueta">Al presionar</div>
+      <div class="segmentado" id="modos">
+        <button type="button" data-modo="0" aria-pressed="true">Atraer</button>
+        <button type="button" data-modo="1" aria-pressed="false">Repeler</button>
+        <button type="button" data-modo="2" aria-pressed="false">Vórtice</button>
+      </div>
+    </div>
+    <div class="grupo">
+      <div class="etiqueta">Paleta</div>
+      <div class="paletas" id="paletas"></div>
+    </div>
+    <label class="grupo">
+      <span class="etiqueta">Partículas <output id="cantidad-valor"></output></span>
+      <input type="range" id="cantidad" min="14" max="20" step="1">
+    </label>
+    <label class="grupo">
+      <span class="etiqueta">Velocidad del flujo <output id="flujo-valor"></output></span>
+      <input type="range" id="flujo" min="0" max="2" step="0.05" value="1">
+    </label>
+    <label class="grupo">
+      <span class="etiqueta">Estela <output id="estela-valor"></output></span>
+      <input type="range" id="estela" min="0" max="0.97" step="0.01" value="0.86">
+    </label>
+    <label class="grupo">
+      <span class="etiqueta">Resplandor <output id="resplandor-valor"></output></span>
+      <input type="range" id="resplandor" min="0" max="2" step="0.05" value="1">
+    </label>
+    <div class="acciones">
+      <button type="button" id="pausa">Pausar</button>
+      <button type="button" id="reiniciar">Reiniciar</button>
+    </div>
+    <div class="estadisticas" id="estadisticas"></div>
+  </div>
+
+  <script>
+  (() => {
+    "use strict";
+
+    const lienzo = document.getElementById("lienzo");
+    const gl = lienzo.getContext("webgl2", {
+      antialias: false, alpha: false, depth: false, stencil: false,
+      premultipliedAlpha: false, powerPreference: "high-performance"
+    });
+    if (!gl) {
+      const aviso = document.createElement("div");
+      aviso.className = "aviso";
+      aviso.textContent = "Tu navegador no soporta WebGL2, necesario para esta animación.";
+      document.body.appendChild(aviso);
+      return;
+    }
+    lienzo.addEventListener("webglcontextlost", (e) => e.preventDefault());
+    lienzo.addEventListener("webglcontextrestored", () => location.reload());
+
+    // Con EXT_color_buffer_float acumulamos en HDR (RGBA16F); si no, en RGBA8.
+    const hdr = !!gl.getExtension("EXT_color_buffer_float");
+
+    // ---------- Shaders ----------
+
+    const RUIDO = `
+      vec3 mod289(vec3 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
+      vec4 mod289(vec4 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
+      vec4 permute(vec4 x) { return mod289(((x * 34.0) + 1.0) * x); }
+      vec4 taylorInvSqrt(vec4 r) { return 1.79284291400159 - 0.85373472095314 * r; }
+      // Ruido simplex 3D (Ashima Arts / Stefan Gustavson)
+      float snoise(vec3 v) {
+        const vec2 C = vec2(1.0 / 6.0, 1.0 / 3.0);
+        const vec4 D = vec4(0.0, 0.5, 1.0, 2.0);
+        vec3 i = floor(v + dot(v, C.yyy));
+        vec3 x0 = v - i + dot(i, C.xxx);
+        vec3 g = step(x0.yzx, x0.xyz);
+        vec3 l = 1.0 - g;
+        vec3 i1 = min(g.xyz, l.zxy);
+        vec3 i2 = max(g.xyz, l.zxy);
+        vec3 x1 = x0 - i1 + C.xxx;
+        vec3 x2 = x0 - i2 + C.yyy;
+        vec3 x3 = x0 - D.yyy;
+        i = mod289(i);
+        vec4 p = permute(permute(permute(
+                  i.z + vec4(0.0, i1.z, i2.z, 1.0))
+                + i.y + vec4(0.0, i1.y, i2.y, 1.0))
+                + i.x + vec4(0.0, i1.x, i2.x, 1.0));
+        float n_ = 0.142857142857;
+        vec3 ns = n_ * D.wyz - D.xzx;
+        vec4 j = p - 49.0 * floor(p * ns.z * ns.z);
+        vec4 x_ = floor(j * ns.z);
+        vec4 y_ = floor(j - 7.0 * x_);
+        vec4 x = x_ * ns.x + ns.yyyy;
+        vec4 y = y_ * ns.x + ns.yyyy;
+        vec4 h = 1.0 - abs(x) - abs(y);
+        vec4 b0 = vec4(x.xy, y.xy);
+        vec4 b1 = vec4(x.zw, y.zw);
+        vec4 s0 = floor(b0) * 2.0 + 1.0;
+        vec4 s1 = floor(b1) * 2.0 + 1.0;
+        vec4 sh = -step(h, vec4(0.0));
+        vec4 a0 = b0.xzyw + s0.xzyw * sh.xxyy;
+        vec4 a1 = b1.xzyw + s1.xzyw * sh.zzww;
+        vec3 p0 = vec3(a0.xy, h.x);
+        vec3 p1 = vec3(a0.zw, h.y);
+        vec3 p2 = vec3(a1.xy, h.z);
+        vec3 p3 = vec3(a1.zw, h.w);
+        vec4 norm = taylorInvSqrt(vec4(dot(p0, p0), dot(p1, p1), dot(p2, p2), dot(p3, p3)));
+        p0 *= norm.x; p1 *= norm.y; p2 *= norm.z; p3 *= norm.w;
+        vec4 m = max(0.6 - vec4(dot(x0, x0), dot(x1, x1), dot(x2, x2), dot(x3, x3)), 0.0);
+        m = m * m;
+        return 42.0 * dot(m * m, vec4(dot(p0, x0), dot(p1, x1), dot(p2, x2), dot(p3, x3)));
+      }
+      // Rotacional de un campo escalar: un flujo sin divergencia (sin sumideros ni fuentes).
+      vec2 curl(vec3 p) {
+        const float e = 0.015;
+        float a = snoise(p + vec3(0.0, e, 0.0));
+        float b = snoise(p - vec3(0.0, e, 0.0));
+        float c = snoise(p + vec3(e, 0.0, 0.0));
+        float d = snoise(p - vec3(e, 0.0, 0.0));
+        return vec2(a - b, d - c) / (2.0 * e);
+      }
+    `;
+
+    // Simulación: se ejecuta por partícula y escribe el nuevo estado con transform feedback.
+    const VS_ACTUALIZAR = `#version 300 es
+      precision highp float;
+      layout(location = 0) in vec4 aEstado;  // posición.xy, velocidad.xy
+      layout(location = 1) in vec2 aMeta;    // vida, semilla
+      uniform float uTiempo, uDt, uAspecto, uFlujo, uFrame;
+      uniform vec2 uPuntero, uPunteroVel;
+      uniform float uPunteroActivo, uPresionado, uModo, uRadio;
+      uniform vec3 uOnda;                    // xy = centro, z = fuerza
+      out vec4 oEstado;
+      out vec2 oMeta;
+      ${RUIDO}
+      uint pcg(uint v) {
+        uint s = v * 747796405u + 2891336453u;
+        uint w = ((s >> ((s >> 28u) + 4u)) ^ s) * 277803737u;
+        return (w >> 22u) ^ w;
+      }
+      float azar(inout uint s) { s = pcg(s); return float(s) / 4294967295.0; }
+
+      void main() {
+        vec2 p = aEstado.xy;
+        vec2 v = aEstado.zw;
+        float vida = aMeta.x;
+        float semilla = aMeta.y;
+
+        // Campo de flujo: dos octavas de ruido curl que evolucionan en el tiempo.
+        vec3 q = vec3(p * 0.9, uTiempo * 0.06);
+        vec2 flujo = curl(q) + 0.45 * curl(q * 2.1 + 17.3);
+        flujo *= 0.11 * uFlujo;
+        v += (flujo - v) * (1.0 - exp(-uDt * 2.0));
+
+        // Interacción con el puntero.
+        vec2 d = uPuntero - p;
+        float r2 = dot(d, d);
+        float r = sqrt(r2) + 1e-4;
+        vec2 n = d / r;
+        vec2 t = vec2(-n.y, n.x);
+        float cerca = exp(-r2 / (uRadio * uRadio));
+        if (uPunteroActivo > 0.5) {
+          v += uPunteroVel * cerca * uDt * 5.0;           // arrastre con el movimiento del cursor
+          if (uPresionado > 0.5) {
+            float amplio = exp(-r2 / (uRadio * uRadio * 6.0));
+            if (uModo < 0.5) {                            // atraer, con giro para formar órbitas
+              v += (n * 2.6 + t * 1.6) * amplio * uDt * 3.0;
+            } else if (uModo < 1.5) {                     // repeler
+              v -= n * 6.0 * amplio * uDt * 3.0;
+            } else {                                      // vórtice
+              v += (t * 5.0 + n * 0.8) * amplio * uDt * 3.0;
+            }
+          } else {
+            v -= n * 0.35 * cerca * uDt * 3.0;            // ligera repulsión al pasar
+          }
+        }
+
+        // Onda expansiva por clic.
+        vec2 dOnda = p - uOnda.xy;
+        float rOnda = length(dOnda) + 1e-4;
+        v += dOnda / rOnda * uOnda.z * exp(-rOnda * rOnda * 5.0) * (0.6 + 0.8 * semilla);
+
+        p += v * uDt;
+
+        // Mundo envolvente: y ∈ [-1, 1], x ∈ [-aspecto, aspecto].
+        float ax = uAspecto + 0.02;
+        if (p.x > ax) p.x -= 2.0 * ax;
+        if (p.x < -ax) p.x += 2.0 * ax;
+        if (p.y > 1.02) p.y -= 2.04;
+        if (p.y < -1.02) p.y += 2.04;
+
+        vida -= uDt * (0.05 + 0.1 * fract(semilla * 13.37));
+        if (vida <= 0.0) {
+          uint s = uint(gl_VertexID) * 9781u + uint(uFrame) * 6271u;
+          p = vec2((azar(s) * 2.0 - 1.0) * uAspecto, azar(s) * 2.0 - 1.0);
+          v = vec2(0.0);
+          vida = 1.0;
+        }
+
+        oEstado = vec4(p, v);
+        oMeta = vec2(vida, semilla);
+      }`;
+
+    const FS_VACIO = `#version 300 es
+      precision highp float;
+      void main() {}`;
+
+    const VS_DIBUJAR = `#version 300 es
+      precision highp float;
+      layout(location = 0) in vec4 aEstado;
+      layout(location = 1) in vec2 aMeta;
+      uniform float uAspecto, uTamano, uIntensidad;
+      uniform vec3 uC0, uC1, uC2;
+      out vec3 vColor;
+      void main() {
+        float rapidez = length(aEstado.zw);
+        float vida = aMeta.x;
+        float semilla = aMeta.y;
+        float aparicion = smoothstep(0.0, 0.15, vida) * smoothstep(1.0, 0.85, vida);
+        float k = clamp(rapidez * 1.8 + (semilla - 0.5) * 0.3, 0.0, 1.0);
+        vec3 c = k < 0.5 ? mix(uC0, uC1, k * 2.0) : mix(uC1, uC2, k * 2.0 - 1.0);
+        vColor = c * aparicion * uIntensidad * (0.5 + 1.8 * k * k);
+        gl_Position = vec4(aEstado.x / uAspecto, aEstado.y, 0.0, 1.0);
+        gl_PointSize = uTamano * (0.55 + semilla * 0.9);
+      }`;
+
+    const FS_DIBUJAR = `#version 300 es
+      precision highp float;
+      in vec3 vColor;
+      out vec4 oColor;
+      void main() {
+        vec2 d = gl_PointCoord - 0.5;
+        float a = exp(-dot(d, d) * 14.0);   // punto gaussiano suave
+        oColor = vec4(vColor * a, 1.0);
+      }`;
+
+    // Triángulo que cubre la pantalla completa, sin búferes.
+    const VS_PANTALLA = `#version 300 es
+      out vec2 vUv;
+      void main() {
+        vec2 p = vec2(gl_VertexID == 1 ? 3.0 : -1.0, gl_VertexID == 2 ? 3.0 : -1.0);
+        vUv = p * 0.5 + 0.5;
+        gl_Position = vec4(p, 0.0, 1.0);
+      }`;
+
+    const FS_COLOR = `#version 300 es
+      precision highp float;
+      uniform vec4 uColor;
+      out vec4 oColor;
+      void main() { oColor = uColor; }`;
+
+    // Composición final: resplandor con mipmaps, tone mapping ACES, viñeta y dithering.
+    const FS_COMPONER = `#version 300 es
+      precision highp float;
+      in vec2 vUv;
+      uniform sampler2D uAcumulado;
+      uniform float uResplandor, uTiempo;
+      uniform vec2 uResolucion;
+      out vec4 oColor;
+      vec3 aces(vec3 x) {
+        return clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0);
+      }
+      float hash(vec2 p) { return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
+      void main() {
+        vec3 c = textureLod(uAcumulado, vUv, 0.0).rgb;
+        vec3 brillo = textureLod(uAcumulado, vUv, 1.5).rgb * 0.30
+                    + textureLod(uAcumulado, vUv, 3.0).rgb * 0.30
+                    + textureLod(uAcumulado, vUv, 4.5).rgb * 0.25
+                    + textureLod(uAcumulado, vUv, 6.0).rgb * 0.25;
+        c += brillo * uResplandor;
+
+        vec2 q = vUv - 0.5;
+        q.x *= uResolucion.x / uResolucion.y;
+        vec3 fondo = mix(vec3(0.004, 0.005, 0.012), vec3(0.020, 0.016, 0.045),
+                         smoothstep(1.1, 0.0, length(q - vec2(0.0, -0.25))));
+        c = aces((fondo + c) * 1.1);
+        c = pow(c, vec3(1.0 / 2.2));
+        c *= mix(1.0, smoothstep(1.25, 0.25, length(q)), 0.45);
+        c += (hash(gl_FragCoord.xy + fract(uTiempo) * 97.0) - 0.5) / 255.0;
+        oColor = vec4(c, 1.0);
+      }`;
+
+    function compilar(tipo, fuente) {
+      const s = gl.createShader(tipo);
+      gl.shaderSource(s, fuente);
+      gl.compileShader(s);
+      if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s));
+      return s;
+    }
+
+    function programa(vs, fs, varyings) {
+      const p = gl.createProgram();
+      gl.attachShader(p, compilar(gl.VERTEX_SHADER, vs));
+      gl.attachShader(p, compilar(gl.FRAGMENT_SHADER, fs));
+      if (varyings) gl.transformFeedbackVaryings(p, varyings, gl.INTERLEAVED_ATTRIBS);
+      gl.linkProgram(p);
+      if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(p));
+      const u = {};
+      const total = gl.getProgramParameter(p, gl.ACTIVE_UNIFORMS);
+      for (let i = 0; i < total; i++) {
+        const nombre = gl.getActiveUniform(p, i).name;
+        u[nombre] = gl.getUniformLocation(p, nombre);
+      }
+      return { p, u };
+    }
+
+    const progActualizar = programa(VS_ACTUALIZAR, FS_VACIO, ["oEstado", "oMeta"]);
+    const progDibujar = programa(VS_DIBUJAR, FS_DIBUJAR);
+    const progColor = programa(VS_PANTALLA, FS_COLOR);
+    const progComponer = programa(VS_PANTALLA, FS_COMPONER);
+
+    // ---------- Partículas (doble búfer + transform feedback) ----------
+
+    const BYTES = 24; // vec4 estado + vec2 meta
+    const retro = gl.createTransformFeedback();
+    const vaoPantalla = gl.createVertexArray();
+    let bufs = [], vaos = [], cantidad = 0, actual = 0;
+
+    function crearParticulas(n) {
+      bufs.forEach((b) => gl.deleteBuffer(b));
+      vaos.forEach((v) => gl.deleteVertexArray(v));
+      const datos = new Float32Array(n * 6);
+      const aspecto = lienzo.width / lienzo.height || 1;
+      for (let i = 0; i < n; i++) {
+        const o = i * 6;
+        datos[o] = (Math.random() * 2 - 1) * aspecto;
+        datos[o + 1] = Math.random() * 2 - 1;
+        datos[o + 4] = Math.random();
+        datos[o + 5] = Math.random();
+      }
+      bufs = [0, 1].map(() => {
+        const b = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, b);
+        gl.bufferData(gl.ARRAY_BUFFER, datos, gl.DYNAMIC_COPY);
+        return b;
+      });
+      vaos = bufs.map((b) => {
+        const v = gl.createVertexArray();
+        gl.bindVertexArray(v);
+        gl.bindBuffer(gl.ARRAY_BUFFER, b);
+        gl.enableVertexAttribArray(0);
+        gl.vertexAttribPointer(0, 4, gl.FLOAT, false, BYTES, 0);
+        gl.enableVertexAttribArray(1);
+        gl.vertexAttribPointer(1, 2, gl.FLOAT, false, BYTES, 16);
+        return v;
+      });
+      gl.bindVertexArray(null);
+      gl.bindBuffer(gl.ARRAY_BUFFER, null);
+      cantidad = n;
+      actual = 0;
+    }
+
+    // ---------- Búfer de acumulación (estelas) ----------
+
+    let texAcum = null, fbAcum = null, dpr = 1;
+
+    function redimensionar() {
+      dpr = Math.min(window.devicePixelRatio || 1, 2);
+      const w = Math.max(1, Math.round(innerWidth * dpr));
+      const h = Math.max(1, Math.round(innerHeight * dpr));
+      if (w === lienzo.width && h === lienzo.height && texAcum) return;
+      lienzo.width = w;
+      lienzo.height = h;
+      if (texAcum) gl.deleteTexture(texAcum);
+      if (fbAcum) gl.deleteFramebuffer(fbAcum);
+      texAcum = gl.createTexture();
+      gl.bindTexture(gl.TEXTURE_2D, texAcum);
+      gl.texImage2D(gl.TEXTURE_2D, 0, hdr ? gl.RGBA16F : gl.RGBA8, w, h, 0, gl.RGBA,
+                    hdr ? gl.HALF_FLOAT : gl.UNSIGNED_BYTE, null);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+      gl.generateMipmap(gl.TEXTURE_2D);
+      fbAcum = gl.createFramebuffer();
+      gl.bindFramebuffer(gl.FRAMEBUFFER, fbAcum);
+      gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, texAcum, 0);
+      gl.clearColor(0, 0, 0, 0);
+      gl.clear(gl.COLOR_BUFFER_BIT);
+      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    }
+
+    // ---------- Paletas ----------
+
+    const paletas = [
+      { nombre: "Aurora", colores: ["#1b3cff", "#19e3b1", "#f4ff9e"] },
+      { nombre: "Atardecer", colores: ["#3f4fb8", "#c96442", "#ffd0a8"] },
+      { nombre: "Fuego", colores: ["#7a0b2e", "#ff5a1f", "#ffe08a"] },
+      { nombre: "Océano", colores: ["#0b2a6b", "#1fa3ff", "#d2f6ff"] },
+      { nombre: "Neón", colores: ["#6a00ff", "#ff2bd6", "#fff0fb"] }
+    ];
+    const aLineal = (hex) => [1, 3, 5].map((i) => Math.pow(parseInt(hex.slice(i, i + 2), 16) / 255, 2.2));
+
+    // ---------- Estado e interfaz ----------
+
+    const reducido = matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const tactil = matchMedia("(pointer: coarse)").matches;
+    const cfg = {
+      modo: 0,
+      paleta: 0,
+      exponente: tactil ? 16 : 18,
+      flujo: reducido ? 0.4 : 1,
+      estela: 0.86,
+      resplandor: 1,
+      pausado: false,
+      cantidadManual: false
+    };
+
+    const $ = (id) => document.getElementById(id);
+    const formatear = (n) => n >= 1e6 ? (n / 1048576).toFixed(0) + "M" : Math.round(n / 1024) + "k";
+
+    document.querySelectorAll("#modos button").forEach((b) => {
+      b.addEventListener("click", () => {
+        cfg.modo = Number(b.dataset.modo);
+        document.querySelectorAll("#modos button").forEach((o) => o.setAttribute("aria-pressed", String(o === b)));
+      });
+    });
+
+    paletas.forEach((pal, i) => {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.title = pal.nombre;
+      b.setAttribute("aria-label", "Paleta " + pal.nombre);
+      b.setAttribute("aria-pressed", String(i === cfg.paleta));
+      b.style.background = `linear-gradient(135deg, ${pal.colores.join(", ")})`;
+      b.addEventListener("click", () => {
+        cfg.paleta = i;
+        $("paletas").querySelectorAll("button").forEach((o, j) => o.setAttribute("aria-pressed", String(j === i)));
+      });
+      $("paletas").appendChild(b);
+    });
+
+    function deslizador(id, clave, texto) {
+      const el = $(id), salida = $(id + "-valor");
+      el.value = cfg[clave];
+      const pintar = () => (salida.textContent = texto(cfg[clave]));
+      el.addEventListener("input", () => { cfg[clave] = Number(el.value); pintar(); });
+      pintar();
+    }
+    deslizador("flujo", "flujo", (v) => v.toFixed(2) + "×");
+    deslizador("estela", "estela", (v) => Math.round(v * 100) + "%");
+    deslizador("resplandor", "resplandor", (v) => v.toFixed(2));
+
+    const deslCantidad = $("cantidad");
+    function mostrarCantidad() {
+      deslCantidad.value = cfg.exponente;
+      $("cantidad-valor").textContent = formatear(2 ** cfg.exponente);
+    }
+    deslCantidad.addEventListener("input", () => {
+      cfg.exponente = Number(deslCantidad.value);
+      cfg.cantidadManual = true;
+      mostrarCantidad();
+    });
+    deslCantidad.addEventListener("change", () => crearParticulas(2 ** cfg.exponente));
+    mostrarCantidad();
+
+    $("pausa").addEventListener("click", (e) => {
+      cfg.pausado = !cfg.pausado;
+      e.currentTarget.textContent = cfg.pausado ? "Continuar" : "Pausar";
+    });
+    $("reiniciar").addEventListener("click", () => crearParticulas(cantidad));
+
+    const panel = $("panel"), botonAjustes = $("ajustes-btn");
+    botonAjustes.addEventListener("click", () => {
+      panel.hidden = !panel.hidden;
+      botonAjustes.setAttribute("aria-expanded", String(!panel.hidden));
+    });
+
+    window.addEventListener("keydown", (e) => {
+      if (e.target.closest && e.target.closest("input, button")) return;
+      if (e.key === "h" || e.key === "H") document.body.classList.toggle("sin-ui");
+      if (e.key === " ") { e.preventDefault(); $("pausa").click(); }
+    });
+
+    // ---------- Puntero ----------
+
+    const puntero = { x: 0, y: 0, vx: 0, vy: 0, px: 0, py: 0, activo: false, presionado: false, t0: 0, ultimo: -1e9 };
+    const onda = { x: 0, y: 0, fuerza: 0 };
+
+    function aMundo(e) {
+      const aspecto = innerWidth / innerHeight;
+      return [(e.clientX / innerWidth * 2 - 1) * aspecto, -(e.clientY / innerHeight * 2 - 1)];
+    }
+    lienzo.addEventListener("pointermove", (e) => {
+      [puntero.x, puntero.y] = aMundo(e);
+      if (!puntero.activo) { puntero.px = puntero.x; puntero.py = puntero.y; }
+      puntero.activo = true;
+      puntero.ultimo = performance.now();
+    });
+    lienzo.addEventListener("pointerdown", (e) => {
+      [puntero.x, puntero.y] = aMundo(e);
+      puntero.px = puntero.x; puntero.py = puntero.y;
+      puntero.activo = true;
+      puntero.presionado = true;
+      puntero.t0 = puntero.ultimo = performance.now();
+      lienzo.setPointerCapture(e.pointerId);
+    });
+    const soltar = (e) => {
+      if (!puntero.presionado) return;
+      puntero.presionado = false;
+      puntero.ultimo = performance.now();
+      if (performance.now() - puntero.t0 < 220) {
+        onda.x = puntero.x; onda.y = puntero.y; onda.fuerza = 1.6;
+      }
+      if (e.pointerType !== "mouse") puntero.activo = false;
+    };
+    lienzo.addEventListener("pointerup", soltar);
+    lienzo.addEventListener("pointercancel", soltar);
+    lienzo.addEventListener("pointerleave", () => { if (!puntero.presionado) puntero.activo = false; });
+
+    // ---------- Bucle principal ----------
+
+    redimensionar();
+    crearParticulas(2 ** cfg.exponente);
+    window.addEventListener("resize", redimensionar);
+
+    let anterior = performance.now(), tiempo = 0, frame = 0;
+    let fpsSuave = 60, cuentaFps = 0, inicioFps = anterior;
+
+    function cuadro(ahora) {
+      requestAnimationFrame(cuadro);
+      const dtReal = Math.min((ahora - anterior) / 1000, 1 / 20);
+      anterior = ahora;
+      const dt = cfg.pausado ? 0 : dtReal * (reducido ? 0.5 : 1);
+      tiempo += dt;
+      frame++;
+
+      const aspecto = lienzo.width / lienzo.height;
+
+      // Sin interacción por un rato, un cursor "fantasma" recorre una curva de Lissajous.
+      const inactivo = ahora - puntero.ultimo > 4000 && !puntero.presionado;
+      let px = puntero.x, py = puntero.y, activo = puntero.activo;
+      if (inactivo && !reducido) {
+        px = Math.sin(tiempo * 0.23) * aspecto * 0.6;
+        py = Math.sin(tiempo * 0.31 + 1.3) * 0.55;
+        activo = true;
+      }
+      if (dtReal > 0) {
+        const suav = 1 - Math.exp(-dtReal * 12);
+        puntero.vx += ((px - puntero.px) / dtReal - puntero.vx) * suav;
+        puntero.vy += ((py - puntero.py) / dtReal - puntero.vy) * suav;
+      }
+      puntero.px = px; puntero.py = py;
+
+      // 1) Simulación
+      const fuente = actual, destino = 1 - actual;
+      const ua = progActualizar.u;
+      gl.useProgram(progActualizar.p);
+      gl.uniform1f(ua.uTiempo, tiempo);
+      gl.uniform1f(ua.uDt, dt);
+      gl.uniform1f(ua.uAspecto, aspecto);
+      gl.uniform1f(ua.uFlujo, cfg.flujo);
+      gl.uniform1f(ua.uFrame, frame % 1000000);
+      gl.uniform2f(ua.uPuntero, px, py);
+      gl.uniform2f(ua.uPunteroVel, puntero.vx, puntero.vy);
+      gl.uniform1f(ua.uPunteroActivo, activo ? 1 : 0);
+      gl.uniform1f(ua.uPresionado, puntero.presionado ? 1 : 0);
+      gl.uniform1f(ua.uModo, cfg.modo);
+      gl.uniform1f(ua.uRadio, 0.18);
+      gl.uniform3f(ua.uOnda, onda.x, onda.y, dt > 0 ? onda.fuerza : 0);
+      if (dt > 0) onda.fuerza = 0;
+
+      gl.bindVertexArray(vaos[fuente]);
+      gl.bindTransformFeedback(gl.TRANSFORM_FEEDBACK, retro);
+      gl.bindBufferBase(gl.TRANSFORM_FEEDBACK_BUFFER, 0, bufs[destino]);
+      gl.enable(gl.RASTERIZER_DISCARD);
+      gl.beginTransformFeedback(gl.POINTS);
+      gl.drawArrays(gl.POINTS, 0, cantidad);
+      gl.endTransformFeedback();
+      gl.disable(gl.RASTERIZER_DISCARD);
+      gl.bindBufferBase(gl.TRANSFORM_FEEDBACK_BUFFER, 0, null);
+      gl.bindTransformFeedback(gl.TRANSFORM_FEEDBACK, null);
+      actual = destino;
+
+      // 2) Acumulación: desvanecer el cuadro anterior y sumar las partículas (mezcla aditiva)
+      gl.bindFramebuffer(gl.FRAMEBUFFER, fbAcum);
+      gl.viewport(0, 0, lienzo.width, lienzo.height);
+      gl.enable(gl.BLEND);
+      gl.useProgram(progColor.p);
+      gl.bindVertexArray(vaoPantalla);
+      gl.blendEquation(gl.FUNC_ADD);
+      gl.blendFunc(gl.ZERO, gl.ONE_MINUS_SRC_ALPHA);
+      gl.uniform4f(progColor.u.uColor, 0, 0, 0, 1 - (cfg.pausado ? Math.max(cfg.estela, 0.6) : cfg.estela));
+      gl.drawArrays(gl.TRIANGLES, 0, 3);
+      if (!hdr) {
+        // En 8 bits la multiplicación se queda "atascada" en valores bajos; restamos un poco.
+        gl.blendEquation(gl.FUNC_REVERSE_SUBTRACT);
+        gl.blendFunc(gl.ONE, gl.ONE);
+        gl.uniform4f(progColor.u.uColor, 2 / 255, 2 / 255, 2 / 255, 0);
+        gl.drawArrays(gl.TRIANGLES, 0, 3);
+        gl.blendEquation(gl.FUNC_ADD);
+      }
+
+      const pal = paletas[cfg.paleta].colores.map(aLineal);
+      const ud = progDibujar.u;
+      gl.blendFunc(gl.ONE, gl.ONE);
+      gl.useProgram(progDibujar.p);
+      gl.uniform1f(ud.uAspecto, aspecto);
+      gl.uniform1f(ud.uTamano, 3.2 * dpr);
+      // Mantiene un brillo total parecido sin importar cuántas partículas haya.
+      gl.uniform1f(ud.uIntensidad, 0.028 * Math.pow(262144 / cantidad, 0.9) * (1 - cfg.estela * 0.6));
+      gl.uniform3fv(ud.uC0, pal[0]);
+      gl.uniform3fv(ud.uC1, pal[1]);
+      gl.uniform3fv(ud.uC2, pal[2]);
+      gl.bindVertexArray(vaos[actual]);
+      gl.drawArrays(gl.POINTS, 0, cantidad);
+      gl.disable(gl.BLEND);
+
+      // 3) Mipmaps para el resplandor y composición final en pantalla
+      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+      gl.bindTexture(gl.TEXTURE_2D, texAcum);
+      gl.generateMipmap(gl.TEXTURE_2D);
+      gl.viewport(0, 0, lienzo.width, lienzo.height);
+      const uc = progComponer.u;
+      gl.useProgram(progComponer.p);
+      gl.uniform1i(uc.uAcumulado, 0);
+      gl.uniform1f(uc.uResplandor, cfg.resplandor);
+      gl.uniform1f(uc.uTiempo, ahora / 1000);
+      gl.uniform2f(uc.uResolucion, lienzo.width, lienzo.height);
+      gl.activeTexture(gl.TEXTURE0);
+      gl.bindVertexArray(vaoPantalla);
+      gl.drawArrays(gl.TRIANGLES, 0, 3);
+      gl.bindVertexArray(null);
+
+      // Estadísticas y ajuste automático de la cantidad si el equipo no da abasto.
+      cuentaFps++;
+      if (ahora - inicioFps > 1000) {
+        fpsSuave = cuentaFps * 1000 / (ahora - inicioFps);
+        cuentaFps = 0;
+        inicioFps = ahora;
+        $("estadisticas").textContent =
+          `${Math.round(fpsSuave)} fps · ${formatear(cantidad)} partículas · ${hdr ? "HDR" : "8 bits"}`;
+        if (!cfg.cantidadManual && !cfg.pausado && fpsSuave < 40 && cfg.exponente > 14 && !document.hidden) {
+          cfg.exponente--;
+          mostrarCantidad();
+          crearParticulas(2 ** cfg.exponente);
+        }
+      }
+    }
+    requestAnimationFrame(cuadro);
+  })();
+  </script>
+</body>
+</html>
