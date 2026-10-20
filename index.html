@@ -209,10 +209,7 @@
     .hz *, .hz-overlay * { box-sizing: border-box; }
     .hz a, .hz-overlay a { color: inherit; text-decoration: none; }
     .hz button, .hz-overlay button { font: inherit; color: inherit; }
-    .hz-bg {
-      position: absolute; inset: 0; z-index: 0; pointer-events: none;
-      background: radial-gradient(560px circle at var(--sx, 50%) var(--sy, 35%), rgba(255,255,255,.85), transparent 65%);
-    }
+    .hz-fx { position: absolute; inset: 0; z-index: 1; width: 100%; height: 100%; pointer-events: none; }
     .hz-grain {
       position: absolute; inset: -50%; z-index: 7; pointer-events: none; opacity: .07;
       background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3' stitchTiles='stitch'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
@@ -570,7 +567,7 @@
 </head>
 <body>
   <section class="hz" id="hero" aria-label="Zenrixa — Creative Agency">
-    <div class="hz-bg"></div>
+    <canvas class="hz-fx" aria-hidden="true"></canvas>
 
     <div class="hz-nav">
       <a class="hz-logo hz-fade" href="#hero" data-magnetic>
@@ -990,12 +987,11 @@
       if (fine) hero.classList.add("has-cursor"); else cursor.remove();
 
       let tx = 0, ty = 0, px = 0, py = 0;
-      let tsx = 50, tsy = 35, sx = 50, sy = 35;
       let mx = -200, my = -200, rx = -200, ry = -200;
       hero.addEventListener("pointermove", e => {
         const r = hero.getBoundingClientRect();
         const nx = (e.clientX - r.left) / r.width, ny = (e.clientY - r.top) / r.height;
-        tx = (nx - .5) * 2; ty = (ny - .5) * 2; tsx = nx * 100; tsy = ny * 100;
+        tx = (nx - .5) * 2; ty = (ny - .5) * 2;
         mx = e.clientX; my = e.clientY;
         if (e.pointerType === "mouse") cursor.classList.add("is-visible");
       });
@@ -1008,24 +1004,23 @@
       hero.addEventListener("pointerdown", () => cursor.classList.add("is-down"));
       addEventListener("pointerup", () => cursor.classList.remove("is-down"));
 
-      // Bucle de animación: parallax, foco de luz, brillo del visor y scroll
+      // Bucle de animación: parallax, brillo del visor y scroll
       const lens = $(".hz-lens");
+      let boom = 0;
       let visible = true;
       new IntersectionObserver(([en]) => { visible = en.isIntersecting; }).observe(hero);
       function loop() {
         if (visible) {
           const k = reduce ? 1 : .07;
           px += (tx - px) * k; py += (ty - py) * k;
-          sx += (tsx - sx) * .12; sy += (tsy - sy) * .12;
           const s = hero.style;
           if (!reduce) { s.setProperty("--px", px.toFixed(4)); s.setProperty("--py", py.toFixed(4)); }
-          s.setProperty("--sx", `${sx.toFixed(2)}%`);
-          s.setProperty("--sy", `${sy.toFixed(2)}%`);
           const hr = hero.getBoundingClientRect();
           if (!reduce) s.setProperty("--scroll", Math.min(1, Math.max(0, -hr.top / hr.height)).toFixed(4));
           const lr = lens.getBoundingClientRect();
           const d = Math.hypot(mx - (lr.left + lr.width / 2), my - (lr.top + lr.height / 2)) / (lr.width * 1.6 || 1);
-          s.setProperty("--glow", Math.max(0, 1 - d).toFixed(3));
+          s.setProperty("--glow", Math.min(1, Math.max(0, 1 - d) + boom).toFixed(3));
+          boom *= .92;
         }
         if (fine) {
           rx += (mx - rx) * .18; ry += (my - ry) * .18;
@@ -1134,6 +1129,179 @@
       closeBtn.addEventListener("click", closeMenu);
       overlay.querySelectorAll(".hz-ov-nav a").forEach(a => a.addEventListener("click", closeMenu));
       addEventListener("keydown", e => { if (e.key === "Escape" && overlay.classList.contains("is-open")) closeMenu(); });
+
+      // Fondo de combate: misiles tierra-aire y balas trazadoras
+      const fx = $(".hz-fx");
+      const ctx = fx.getContext("2d");
+      let W = 0, H = 0;
+      function resizeFx() {
+        const dpr = Math.min(2, devicePixelRatio || 1);
+        W = hero.clientWidth; H = hero.clientHeight;
+        fx.width = W * dpr; fx.height = H * dpr;
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      }
+      resizeFx();
+      new ResizeObserver(resizeFx).observe(hero);
+
+      const tracers = [], missiles = [], sparks = [], smoke = [], flashes = [];
+      const rand = (a, b) => a + Math.random() * (b - a);
+      const guns = [.08, .26, .74, .92];
+
+      function spawnTracer(x, ang) {
+        const sp = H * rand(1.3, 1.7);
+        tracers.push({ x, y: H + 4, vx: Math.sin(ang) * sp, vy: -Math.cos(ang) * sp, life: 0, max: rand(1.1, 1.6), trail: [] });
+        flashes.push({ x, y: H, r: 16, life: 0, max: .08 });
+      }
+      function fireBurst(x = guns[Math.floor(Math.random() * guns.length)] * W + rand(-20, 20), ang = rand(-.45, .45)) {
+        const n = Math.floor(rand(5, 11)), gap = rand(55, 80);
+        for (let i = 0; i < n; i++) setTimeout(() => spawnTracer(x, ang + rand(-.035, .035)), i * gap);
+      }
+      // Los objetivos por defecto evitan el centro, donde la figura taparía la explosión
+      const sideX = () => (Math.random() < .5 ? rand(.04, .3) : rand(.7, .96)) * W;
+      function launchMissile(tx = sideX(), ty = rand(.12, .5) * H, x = tx + rand(-.15, .15) * W) {
+        const ang = Math.atan2(ty - H, tx - x);
+        missiles.push({ x, y: H + 10, ang, sp: H * .25, tx, ty, t: 0 });
+      }
+      function explode(x, y) {
+        boom = 1;
+        flashes.push({ x, y, r: rand(60, 110), life: 0, max: .35 });
+        flashes.push({ x, y, r: rand(40, 60), life: 0, max: .7, ring: true });
+        const n = Math.floor(rand(40, 70));
+        for (let i = 0; i < n && sparks.length < 900; i++) {
+          const a = rand(0, Math.PI * 2), sp = H * rand(.15, .65);
+          sparks.push({ x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, life: 0, max: rand(.6, 1.3), hue: rand(18, 45) });
+        }
+        for (let i = 0; i < 10; i++) {
+          smoke.push({ x: x + rand(-18, 18), y: y + rand(-18, 18), r: rand(8, 16), grow: rand(14, 26), life: 0, max: rand(2.2, 3.4), a: .55, vx: rand(-8, 8), vy: rand(-10, 2) });
+        }
+      }
+
+      function updateFx(dt) {
+        const g = H * .35;
+        for (let i = tracers.length - 1; i >= 0; i--) {
+          const t = tracers[i];
+          t.life += dt; t.vy += g * dt; t.x += t.vx * dt; t.y += t.vy * dt;
+          t.trail.push([t.x, t.y]);
+          if (t.trail.length > 20) t.trail.shift();
+          if (t.life > t.max || t.y < -60 || t.x < -60 || t.x > W + 60) tracers.splice(i, 1);
+        }
+        for (let i = missiles.length - 1; i >= 0; i--) {
+          const m = missiles[i];
+          m.t += dt;
+          const want = Math.atan2(m.ty - m.y, m.tx - m.x);
+          m.ang += (want - m.ang) * Math.min(1, dt * 2.5) + Math.sin(m.t * 14) * .012;
+          m.sp = Math.min(H * 1.1, m.sp + H * 1.2 * dt);
+          const step = m.sp * dt, px0 = m.x, py0 = m.y;
+          m.x += Math.cos(m.ang) * step; m.y += Math.sin(m.ang) * step;
+          // Una bocanada de humo cada ~5 px para que la estela sea continua
+          for (let j = 0, n = Math.ceil(step / 5); j < n; j++) {
+            const f = j / n;
+            smoke.push({ x: px0 + (m.x - px0) * f - Math.cos(m.ang) * 8, y: py0 + (m.y - py0) * f - Math.sin(m.ang) * 8, r: 2, grow: rand(6, 11), life: 0, max: rand(1.2, 2), a: .28, vx: rand(-4, 4), vy: rand(-4, 2) });
+          }
+          if (Math.hypot(m.tx - m.x, m.ty - m.y) < 18 || m.y < m.ty) { explode(m.x, m.y); missiles.splice(i, 1); }
+        }
+        const drag = Math.exp(-2.6 * dt);
+        for (let i = sparks.length - 1; i >= 0; i--) {
+          const p = sparks[i];
+          p.life += dt; p.vx *= drag; p.vy = p.vy * drag + g * .6 * dt; p.x += p.vx * dt; p.y += p.vy * dt;
+          if (p.life > p.max) sparks.splice(i, 1);
+        }
+        for (let i = smoke.length - 1; i >= 0; i--) {
+          const p = smoke[i];
+          p.life += dt; p.r += p.grow * dt; p.x += p.vx * dt; p.y += p.vy * dt;
+          if (p.life > p.max) smoke.splice(i, 1);
+        }
+        for (let i = flashes.length - 1; i >= 0; i--) {
+          flashes[i].life += dt;
+          if (flashes[i].life > flashes[i].max) flashes.splice(i, 1);
+        }
+      }
+
+      function drawFx() {
+        ctx.clearRect(0, 0, W, H);
+        for (const p of smoke) {
+          const k = p.life / p.max;
+          const sg = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, p.r);
+          sg.addColorStop(0, `rgba(70,70,76,${(p.a * (1 - k)).toFixed(3)})`);
+          sg.addColorStop(1, "rgba(70,70,76,0)");
+          ctx.fillStyle = sg;
+          ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2); ctx.fill();
+        }
+        for (const f of flashes) {
+          const k = f.life / f.max;
+          if (f.ring) {
+            ctx.strokeStyle = `rgba(255,255,255,${((1 - k) * .7).toFixed(3)})`;
+            ctx.lineWidth = 2;
+            ctx.beginPath(); ctx.arc(f.x, f.y, f.r * (.5 + 2 * k), 0, Math.PI * 2); ctx.stroke();
+            continue;
+          }
+          const r = f.r * (.4 + .6 * k), a = 1 - k;
+          const gr = ctx.createRadialGradient(f.x, f.y, 0, f.x, f.y, r);
+          gr.addColorStop(0, `rgba(255,250,230,${a})`);
+          gr.addColorStop(.3, `rgba(255,170,60,${a * .8})`);
+          gr.addColorStop(1, "rgba(255,120,30,0)");
+          ctx.fillStyle = gr;
+          ctx.beginPath(); ctx.arc(f.x, f.y, r, 0, Math.PI * 2); ctx.fill();
+        }
+        ctx.lineCap = "round";
+        for (const p of sparks) {
+          const k = p.life / p.max;
+          ctx.strokeStyle = `hsla(${p.hue},100%,${60 - k * 35}%,${(1 - k).toFixed(3)})`;
+          ctx.lineWidth = 1.6;
+          ctx.beginPath(); ctx.moveTo(p.x - p.vx * .025, p.y - p.vy * .025); ctx.lineTo(p.x, p.y); ctx.stroke();
+        }
+        for (const t of tracers) {
+          if (t.trail.length < 2) continue;
+          const a = t.life > t.max - .25 ? Math.max(0, (t.max - t.life) / .25) : 1;
+          const [x0, y0] = t.trail[0];
+          const gr = ctx.createLinearGradient(x0, y0, t.x, t.y);
+          gr.addColorStop(0, "rgba(255,110,20,0)");
+          gr.addColorStop(1, `rgba(255,160,50,${a})`);
+          ctx.strokeStyle = gr;
+          ctx.lineWidth = 2.6;
+          ctx.beginPath(); ctx.moveTo(x0, y0);
+          for (const [x, y] of t.trail) ctx.lineTo(x, y);
+          ctx.stroke();
+          ctx.shadowColor = "#ff7a1a"; ctx.shadowBlur = 10;
+          ctx.fillStyle = `rgba(255,236,190,${a})`;
+          ctx.beginPath(); ctx.arc(t.x, t.y, 1.8, 0, Math.PI * 2); ctx.fill();
+          ctx.shadowBlur = 0;
+        }
+        for (const m of missiles) {
+          const cx = Math.cos(m.ang), cy = Math.sin(m.ang);
+          ctx.strokeStyle = "#1c1c1f"; ctx.lineWidth = 2.6;
+          ctx.beginPath(); ctx.moveTo(m.x - cx * 12, m.y - cy * 12); ctx.lineTo(m.x, m.y); ctx.stroke();
+          ctx.shadowColor = "#ff7a1a"; ctx.shadowBlur = 14;
+          ctx.fillStyle = "#fff4c2";
+          ctx.beginPath(); ctx.arc(m.x - cx * 13, m.y - cy * 13, rand(2.2, 3.6), 0, Math.PI * 2); ctx.fill();
+          ctx.shadowBlur = 0;
+        }
+      }
+
+      let last = 0, nextMissile = .6, nextBurst = .2;
+      function fxLoop(now) {
+        const dt = Math.min(.05, (now - (last || now)) / 1000);
+        last = now;
+        if (visible && !document.hidden) {
+          nextMissile -= dt; nextBurst -= dt;
+          if (nextMissile <= 0) { launchMissile(); nextMissile = rand(1.2, 2.6); }
+          if (nextBurst <= 0) { fireBurst(); nextBurst = rand(.5, 1.3); }
+          updateFx(dt);
+          drawFx();
+        }
+        requestAnimationFrame(fxLoop);
+      }
+      if (!reduce) requestAnimationFrame(fxLoop);
+
+      // Clic en el fondo: lanza un misil y una ráfaga hacia ese punto
+      hero.addEventListener("click", e => {
+        if (reduce || e.target.closest("a, button, .hz-card, .hz-partners, .hz-hit")) return;
+        const r = hero.getBoundingClientRect();
+        const x = e.clientX - r.left, y = e.clientY - r.top;
+        launchMissile(x, y);
+        const gun = guns.map(p => p * W).sort((a, b) => Math.abs(a - x) - Math.abs(b - x))[0];
+        fireBurst(gun, Math.atan2(x - gun, H - y));
+      });
 
       // Scroll Down
       $(".hz-scroll").addEventListener("click", () => {
